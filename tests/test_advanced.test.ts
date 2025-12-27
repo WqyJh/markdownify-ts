@@ -48,7 +48,7 @@ describe('Advanced Tests', () => {
     });
 
     test('ignore comments with other tags', () => {
-      expect(md("<!-- This is a comment --><a href='http://example.com/'>example link</a>"))
+      expect(md('<!-- This is a comment --><a href=\'http://example.com/\'>example link</a>'))
         .toBe('[example link](http://example.com/)');
     });
   });

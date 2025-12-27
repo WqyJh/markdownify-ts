@@ -62,7 +62,7 @@ describe('Lists Tests', () => {
       const result1 = md('<ol start="-1"><li>a</li><li>b</li></ol>');
       expect(result1.includes('1. a')).toBe(true);
       expect(result1.includes('b')).toBe(true);
-      
+
       const result2 = md('<ol start="foo"><li>a</li><li>b</li></ol>');
       expect(result2.includes('1. a')).toBe(true);
       expect(result2.includes('b')).toBe(true);

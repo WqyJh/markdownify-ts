@@ -1,0 +1,16 @@
+# 依赖目录
+node_modules/
+dist/
+
+# 构建配置
+webpack.config.cjs
+jest.config.js
+
+# 测试临时文件
+coverage/
+
+# 编译输出
+*.js
+*.d.ts
+
+# 配置文件（如果有需要忽略的）

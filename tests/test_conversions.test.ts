@@ -284,7 +284,7 @@ describe('Conversion Tests', () => {
 
   describe('test_div_section_article', () => {
     const tags = ['div', 'section', 'article'];
-    
+
     tags.forEach(tag => {
       test(`${tag} with simple content`, () => {
         expect(md(`<${tag}>456</${tag}>`)).toBe('\n\n456\n\n');
@@ -348,11 +348,11 @@ describe('Conversion Tests', () => {
 
   describe('test_figcaption', () => {
     test('figcaption with text before', () => {
-      expect(md("TEXT<figure><figcaption>\nCaption\n</figcaption><span>SPAN</span></figure>")).toBe("TEXT\n\nCaption\n\nSPAN");
+      expect(md('TEXT<figure><figcaption>\nCaption\n</figcaption><span>SPAN</span></figure>')).toBe('TEXT\n\nCaption\n\nSPAN');
     });
 
     test('figcaption with text after', () => {
-      expect(md("<figure><span>SPAN</span><figcaption>\nCaption\n</figcaption></figure>TEXT")).toBe("SPAN\n\nCaption\n\nTEXT");
+      expect(md('<figure><span>SPAN</span><figcaption>\nCaption\n</figcaption></figure>TEXT')).toBe('SPAN\n\nCaption\n\nTEXT');
     });
   });
 
@@ -454,14 +454,14 @@ describe('Conversion Tests', () => {
 
   describe('test_hn_nested_simple_tag', () => {
     const tag_to_markdown = [
-      ["strong", "**strong**"],
-      ["b", "**b**"],
-      ["em", "*em*"],
-      ["i", "*i*"],
-      ["p", "p"],
-      ["a", "a"],
-      ["div", "div"],
-      ["blockquote", "blockquote"],
+      ['strong', '**strong**'],
+      ['b', '**b**'],
+      ['em', '*em*'],
+      ['i', '*i*'],
+      ['p', 'p'],
+      ['a', 'a'],
+      ['div', 'div'],
+      ['blockquote', 'blockquote'],
     ];
 
     tag_to_markdown.forEach(([tag, markdown]) => {
@@ -477,9 +477,9 @@ describe('Conversion Tests', () => {
 
   describe('test_hn_nested_img', () => {
     const image_attributes_to_markdown = [
-      ["", "", ""],
-      ["alt='Alt Text'", "Alt Text", ""],
-      ["alt='Alt Text' title='Optional title'", "Alt Text", ' "Optional title"'],
+      ['', '', ''],
+      ['alt=\'Alt Text\'', 'Alt Text', ''],
+      ['alt=\'Alt Text\' title=\'Optional title\'', 'Alt Text', ' "Optional title"'],
     ];
 
     image_attributes_to_markdown.forEach(([image_attributes, markdown, title]) => {
@@ -517,7 +517,7 @@ describe('Conversion Tests', () => {
 
   describe('test_hn_newlines', () => {
     test('multiple headings with text between', () => {
-      expect(md("<h1>H1-1</h1>TEXT<h2>H2-2</h2>TEXT<h1>H1-2</h1>TEXT", { heading_style: ATX }))
+      expect(md('<h1>H1-1</h1>TEXT<h2>H2-2</h2>TEXT<h1>H1-2</h1>TEXT', { heading_style: ATX }))
         .toBe('\n\n# H1-1\n\nTEXT\n\n## H2-2\n\nTEXT\n\n# H1-2\n\nTEXT');
     });
 
@@ -604,7 +604,7 @@ describe('Conversion Tests', () => {
     });
 
     test('nested paragraphs', () => {
-      expect(md("<p><p>hello</p></p>")).toBe("\n\nhello\n\n");
+      expect(md('<p><p>hello</p></p>')).toBe('\n\nhello\n\n');
     });
 
     test('paragraph with long text', () => {
@@ -765,7 +765,7 @@ describe('Conversion Tests', () => {
     });
 
     test('paragraph before and after pre', () => {
-      expect(md("<p>foo</p>\n<pre>bar</pre>\n</p>baz</p>", { sub_symbol: "^" })).toBe("\n\nfoo\n\n```\nbar\n```\n\nbaz");
+      expect(md('<p>foo</p>\n<pre>bar</pre>\n</p>baz</p>', { sub_symbol: '^' })).toBe('\n\nfoo\n\n```\nbar\n```\n\nbaz');
     });
   });
 

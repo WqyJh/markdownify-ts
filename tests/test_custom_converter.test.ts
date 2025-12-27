@@ -12,17 +12,17 @@ class UnitTestConverter extends MarkdownConverter {
 
   convert_custom_tag(el: any, text: string, parent_tags: Set<string>): string {
     /* Ensure conversion function is found for tags with special characters in name */
-    return "convert_custom_tag(): " + text;
+    return 'convert_custom_tag(): ' + text;
   }
 
   convert_h1(el: any, text: string, parent_tags: Set<string>): string {
     /* Ensure explicit heading conversion function is used */
-    return "convert_h1: " + text;
+    return 'convert_h1: ' + text;
   }
 
   convert_hN(n: number, el: any, text: string, parent_tags: Set<string>): string {
     /* Ensure general heading conversion function is used */
-    return "convert_hN(" + n + "): " + text;
+    return 'convert_hN(' + n + '): ' + text;
   }
 }
 
@@ -44,15 +44,15 @@ describe('Custom Converter Tests', () => {
     });
 
     test('custom tag conversion', () => {
-      expect(md("<custom-tag>text</custom-tag>")).toBe("convert_custom_tag(): text");
+      expect(md('<custom-tag>text</custom-tag>')).toBe('convert_custom_tag(): text');
     });
 
     test('explicit h1 conversion function', () => {
-      expect(md("<h1>text</h1>")).toBe("convert_h1: text");
+      expect(md('<h1>text</h1>')).toBe('convert_h1: text');
     });
 
     test('general heading conversion function', () => {
-      expect(md("<h3>text</h3>")).toBe("convert_hN(3): text");
+      expect(md('<h3>text</h3>')).toBe('convert_hN(3): text');
     });
   });
 

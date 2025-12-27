@@ -8,7 +8,6 @@ import {
   ATX,
   ATX_CLOSED,
   UNDERLINED,
-  SETEXT,
   SPACES,
   BACKSLASH,
   ASTERISK,
@@ -56,20 +55,20 @@ function abstractInlineConversion(markupFn: (self: MarkdownConverter) => string)
   return function(this: MarkdownConverter, el: Element, text: string, parent_tags: Set<string>): string {
     const markupPrefix = markupFn(this);
     let markupSuffix = markupPrefix;
-    
+
     if (markupPrefix.startsWith('<') && markupPrefix.endsWith('>')) {
       markupSuffix = '</' + markupPrefix.substring(1);
     }
-    
+
     if (parent_tags.has('_noformat')) {
       return text;
     }
-    
+
     const [prefix, suffix, chompedText] = chomp(text);
     if (!chompedText) {
       return '';
     }
-    
+
     return `${prefix}${markupPrefix}${chompedText}${markupSuffix}${suffix}`;
   };
 }
@@ -82,8 +81,8 @@ function shouldRemoveWhitespaceInside(el: Element): boolean {
   if (reHtmlHeading.test(tagName)) {
     return true;
   }
-  return ['p', 'blockquote', 'article', 'div', 'section', 'ol', 'ul', 'li', 
-          'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'].includes(tagName);
+  return ['p', 'blockquote', 'article', 'div', 'section', 'ol', 'ul', 'li',
+    'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'].includes(tagName);
 }
 
 function shouldRemoveWhitespaceOutside(el: Node | null): boolean {
@@ -139,7 +138,7 @@ export class MarkdownConverter {
 
     // Start with default options
     this.options = { ...defaultOptions };
-    
+
     // Apply options - only override if the key exists in the provided options
     // This matches Python's behavior where undefined means "not provided"
     for (const [key, value] of Object.entries(options)) {
@@ -148,7 +147,7 @@ export class MarkdownConverter {
         (this.options as any)[key] = this.normalizeOptionValue(key, value);
       }
     }
-    
+
     if (this.options.strip && this.options.convert) {
       throw new Error('You may specify either tags to strip or tags to convert, but not both.');
     }
@@ -161,41 +160,41 @@ export class MarkdownConverter {
     if (typeof value !== 'string') {
       return value;
     }
-    
+
     const lowerValue = value.toLowerCase();
-    
+
     switch (key) {
-      case 'heading_style':
-        if (lowerValue === 'atx') return ATX;
-        if (lowerValue === 'atx_closed') return ATX_CLOSED;
-        if (lowerValue === 'underlined') return UNDERLINED;
-        return value;
-      
-      case 'newline_style':
-        if (lowerValue === 'spaces') return SPACES;
-        if (lowerValue === 'backslash') return BACKSLASH;
-        return value;
-      
-      case 'strong_em_symbol':
-        if (lowerValue === 'asterisk' || value === '*') return ASTERISK;
-        if (lowerValue === 'underscore' || value === '_') return UNDERSCORE;
-        return value;
-      
-      case 'strip_document':
-        if (lowerValue === 'strip') return STRIP;
-        if (lowerValue === 'lstrip') return LSTRIP;
-        if (lowerValue === 'rstrip') return RSTRIP;
-        if (lowerValue === 'null' || value === null) return null;
-        return value;
-      
-      case 'strip_pre':
-        if (lowerValue === 'strip') return STRIP;
-        if (lowerValue === 'strip_one') return STRIP_ONE;
-        if (lowerValue === 'null' || value === null) return null;
-        return value;
-      
-      default:
-        return value;
+    case 'heading_style':
+      if (lowerValue === 'atx') return ATX;
+      if (lowerValue === 'atx_closed') return ATX_CLOSED;
+      if (lowerValue === 'underlined') return UNDERLINED;
+      return value;
+
+    case 'newline_style':
+      if (lowerValue === 'spaces') return SPACES;
+      if (lowerValue === 'backslash') return BACKSLASH;
+      return value;
+
+    case 'strong_em_symbol':
+      if (lowerValue === 'asterisk' || value === '*') return ASTERISK;
+      if (lowerValue === 'underscore' || value === '_') return UNDERSCORE;
+      return value;
+
+    case 'strip_document':
+      if (lowerValue === 'strip') return STRIP;
+      if (lowerValue === 'lstrip') return LSTRIP;
+      if (lowerValue === 'rstrip') return RSTRIP;
+      if (lowerValue === 'null' || value === null) return null;
+      return value;
+
+    case 'strip_pre':
+      if (lowerValue === 'strip') return STRIP;
+      if (lowerValue === 'strip_one') return STRIP_ONE;
+      if (lowerValue === 'null' || value === null) return null;
+      return value;
+
+    default:
+      return value;
     }
   }
 
@@ -211,10 +210,10 @@ export class MarkdownConverter {
       }
       return `<${tagName}${attrs}></${tagName}>`;
     });
-    
+
     // Parse HTML using htmlparser2
     const dom = htmlparser2.parseDocument(html);
-    
+
     // Find body element or use root
     let body: Element | undefined;
     if (dom.children) {
@@ -225,19 +224,19 @@ export class MarkdownConverter {
         }
       }
     }
-    
+
     const root = body || dom;
     let result = this.convertSoup(root);
-    
+
     // Apply strip_document logic
     const stripDocument = this.options.strip_document;
     if (stripDocument !== null) {
       result = this.applyStripDocument(result, stripDocument);
     }
-    
+
     return result;
   }
-  
+
   private applyStripDocument(text: string, stripMode: string): string {
     if (stripMode === STRIP) {
       return text.trim();
@@ -255,11 +254,11 @@ export class MarkdownConverter {
       const results = (soup.children || [])
         .map((child: Node) => this.processElement(child, new Set()))
         .filter((s: string) => s);
-      
+
       // Join results, merging excess newlines between elements
       if (results.length === 0) return '';
       if (results.length === 1) return results[0];
-      
+
       let result = results[0];
       for (let i = 1; i < results.length; i++) {
         const current = results[i];
@@ -286,7 +285,7 @@ export class MarkdownConverter {
     if (isText(node)) {
       // Check for special content that should be ignored
       const text = node.data || '';
-      if (text.trim().startsWith('<!DOCTYPE') || 
+      if (text.trim().startsWith('<!DOCTYPE') ||
           text.trim().startsWith('<![CDATA[')) {
         return '';
       }
@@ -300,7 +299,7 @@ export class MarkdownConverter {
 
   processTag(node: Node, parent_tags: Set<string> = new Set()): string {
     if (!isElement(node)) return '';
-    
+
     const shouldRemoveInside = shouldRemoveWhitespaceInside(node);
 
     const _canIgnore = (el: Node): boolean => {
@@ -313,16 +312,16 @@ export class MarkdownConverter {
         // For TextNode, check if it has siblings
         const hasPrevSibling = el.prev !== null;
         const hasNextSibling = el.next !== null;
-        
+
         if (shouldRemoveInside && (!hasPrevSibling || !hasNextSibling)) {
           return true;
         }
-        
-        if (shouldRemoveWhitespaceOutside(el.prev) || 
+
+        if (shouldRemoveWhitespaceOutside(el.prev) ||
             shouldRemoveWhitespaceOutside(el.next)) {
           return true;
         }
-        
+
         return false;
       } else {
         return true;
@@ -355,7 +354,7 @@ export class MarkdownConverter {
       for (const childString of childStrings) {
         const match = reExtractNewlines.exec(childString);
         if (!match) continue;
-        
+
         const [_, leadingNl, content, trailingNl] = match;
 
         if (processedChildStrings[processedChildStrings.length - 1] && leadingNl) {
@@ -388,7 +387,7 @@ export class MarkdownConverter {
 
   processText(el: Node, parent_tags: Set<string> = new Set()): string {
     if (!isText(el)) return '';
-    
+
     let text = el.data || '';
 
     if (!parent_tags.has('pre')) {
@@ -410,12 +409,12 @@ export class MarkdownConverter {
     if (el.parent) {
       const hasPrevSibling = el.prev !== null;
       const hasNextSibling = el.next !== null;
-      
-      if (shouldRemoveWhitespaceOutside(el.prev) || 
+
+      if (shouldRemoveWhitespaceOutside(el.prev) ||
           (el.parent && isElement(el.parent) && shouldRemoveWhitespaceInside(el.parent) && !hasPrevSibling)) {
         text = text.replace(/^[\t\r\n ]+/, '');
       }
-      if (shouldRemoveWhitespaceOutside(el.next) || 
+      if (shouldRemoveWhitespaceOutside(el.next) ||
           (el.parent && isElement(el.parent) && shouldRemoveWhitespaceInside(el.parent) && !hasNextSibling)) {
         text = text.replace(/[\t\r\n ]+$/, '');
       }
@@ -499,7 +498,7 @@ export class MarkdownConverter {
     if (this.options.escape_underscores) {
       text = text.replace(/_/g, '\\_');
     }
-    
+
     return text;
   }
 
@@ -512,27 +511,27 @@ export class MarkdownConverter {
     if (parent_tags.has('_noformat')) {
       return text;
     }
-    
+
     const [prefix, suffix, chompedText] = chomp(text);
     if (!chompedText) {
       return '';
     }
-    
+
     const href = el.attribs?.href || '';
     const title = el.attribs?.title || '';
-    
-    if (this.options.autolinks && 
-        chompedText.replace(/\\_/g, '_') === href && 
-        !title && 
+
+    if (this.options.autolinks &&
+        chompedText.replace(/\\_/g, '_') === href &&
+        !title &&
         !this.options.default_title) {
       return `<${href}>`;
     }
-    
+
     let finalTitle = title;
     if (this.options.default_title && !title) {
       finalTitle = href;
     }
-    
+
     const titlePart = finalTitle ? ` "${finalTitle.replace(/"/g, '\\"')}"` : '';
     return href ? `${prefix}[${chompedText}](${href}${titlePart})${suffix}` : chompedText;
   }
@@ -548,7 +547,7 @@ export class MarkdownConverter {
       return ' ' + text + ' ';
     }
     if (!text) {
-      return "\n";
+      return '\n';
     }
 
     const lines = text.split('\n');
@@ -559,7 +558,7 @@ export class MarkdownConverter {
       if (!trimmedLine) return '>';
       return '> ' + trimmedLine;
     });
-    
+
     return '\n' + indentedLines.join('\n') + '\n\n';
   }
 
@@ -591,7 +590,7 @@ export class MarkdownConverter {
 
     let finalText = chompedText;
     if (maxBackticks > 0) {
-      finalText = " " + chompedText + " ";
+      finalText = ' ' + chompedText + ' ';
     }
 
     return `${prefix}${markupDelimiter}${finalText}${markupDelimiter}${suffix}`;
@@ -686,8 +685,8 @@ export class MarkdownConverter {
     const src = el.attribs?.src || '';
     const title = el.attribs?.title || '';
     const titlePart = title ? ` "${title.replace(/"/g, '\\"')}"` : '';
-    
-    if (parent_tags.has('_inline') && 
+
+    if (parent_tags.has('_inline') &&
         el.parent && isElement(el.parent) &&
         !this.options.keep_inline_images_in.includes(el.parent.name.toLowerCase())) {
       return alt;
@@ -697,23 +696,23 @@ export class MarkdownConverter {
   }
 
   convert_video(el: Element, text: string, parent_tags: Set<string>): string {
-    if (parent_tags.has('_inline') && 
+    if (parent_tags.has('_inline') &&
         el.parent && isElement(el.parent) &&
         !this.options.keep_inline_images_in.includes(el.parent.name.toLowerCase())) {
       return text;
     }
-    
+
     const src = el.attribs?.src || '';
     let actualSrc = src;
     if (!actualSrc && el.children) {
-      const sources = el.children.filter((child: Node) => 
+      const sources = el.children.filter((child: Node) =>
         isElement(child) && child.name === 'source' && child.attribs?.src
       );
       if (sources.length > 0 && isElement(sources[0])) {
         actualSrc = sources[0].attribs?.src || '';
       }
     }
-    
+
     const poster = el.attribs?.poster || '';
     if (actualSrc && poster) {
       return `[![${text}](${poster})](${actualSrc})`;
@@ -730,15 +729,15 @@ export class MarkdownConverter {
   convert_list(el: Element, text: string, parent_tags: Set<string>): string {
     let beforeParagraph = false;
     const nextSibling = el.next;
-    if (nextSibling && isElement(nextSibling) && 
+    if (nextSibling && isElement(nextSibling) &&
         !['ul', 'ol'].includes(nextSibling.name?.toLowerCase() || '')) {
       beforeParagraph = true;
     }
-    
+
     if (parent_tags.has('li')) {
       return '\n' + text.trimEnd();
     }
-    
+
     return '\n\n' + text + (beforeParagraph ? '\n' : '');
   }
 
@@ -748,16 +747,16 @@ export class MarkdownConverter {
   convert_li(el: Element, text: string, parent_tags: Set<string>): string {
     text = (text || '').trim();
     if (!text) {
-      return "\n";
+      return '\n';
     }
 
     const parent = el.parent;
     let bullet = '';
-    
+
     if (parent && isElement(parent) && parent.name?.toLowerCase() === 'ol') {
       const startAttr = parent.attribs?.start;
       const start = startAttr && !isNaN(parseInt(startAttr, 10)) ? parseInt(startAttr, 10) : 1;
-      const prevSiblings = (parent.children || []).filter((child: Node) => 
+      const prevSiblings = (parent.children || []).filter((child: Node) =>
         isElement(child) && child.name?.toLowerCase() === 'li'
       );
       const currentIndex = prevSiblings.indexOf(el);
@@ -779,7 +778,7 @@ export class MarkdownConverter {
       const bullets = this.options.bullets;
       bullet = bullets[depth % bullets.length];
     }
-    
+
     bullet = bullet + ' ';
     const bulletWidth = bullet.length;
     const bulletIndent = ' '.repeat(bulletWidth);
@@ -826,7 +825,7 @@ export class MarkdownConverter {
     if (!this.options.wrap || this.options.wrap_width === null || this.options.wrap_width === undefined) {
       return text;
     }
-    
+
     const lines = text.split('\n');
     const newLines = [];
     for (let line of lines) {
@@ -838,7 +837,7 @@ export class MarkdownConverter {
         const words = lineNoTrailing.split(' ');
         let wrappedLine = '';
         let currentLine = '';
-        
+
         for (const word of words) {
           if ((currentLine + word).length > this.options.wrap_width) {
             if (currentLine) {
@@ -872,7 +871,7 @@ export class MarkdownConverter {
     if (!text) {
       return '';
     }
-    
+
     let codeLanguage = this.options.code_language;
 
     if (this.options.code_language_callback) {
@@ -897,7 +896,7 @@ export class MarkdownConverter {
 
     // For STRIP_ONE, we need to preserve the exact format that Python produces
     // Python's convert_pre returns: \n\n```\n  \n  Hello  \n  \n```\n\n
-    // But the content after strip1Pre should be:   \n  Hello  \n  
+    // But the content after strip1Pre should be:   \n  Hello  \n
     if (stripPreOption === STRIP_ONE) {
       return `\n\n\`\`\`${codeLanguage}\n${text}\n\`\`\`\n\n`;
     } else {
@@ -947,7 +946,7 @@ export class MarkdownConverter {
     if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
       colspan = Math.max(1, Math.min(1000, parseInt(colspanAttr, 10)));
     }
-    return ' ' + text.trim().replace(/\n/g, " ") + ' |'.repeat(colspan);
+    return ' ' + text.trim().replace(/\n/g, ' ') + ' |'.repeat(colspan);
   }
 
   convert_th(el: Element, text: string, parent_tags: Set<string>): string {
@@ -956,30 +955,30 @@ export class MarkdownConverter {
     if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
       colspan = Math.max(1, Math.min(1000, parseInt(colspanAttr, 10)));
     }
-    return ' ' + text.trim().replace(/\n/g, " ") + ' |'.repeat(colspan);
+    return ' ' + text.trim().replace(/\n/g, ' ') + ' |'.repeat(colspan);
   }
 
   convert_tr(el: Element, text: string, parent_tags: Set<string>): string {
-    const cells = (el.children || []).filter((child: Node) => 
+    const cells = (el.children || []).filter((child: Node) =>
       isElement(child) && (child.name === 'td' || child.name === 'th')
     );
-    const isFirstRow = el.prev === null || 
-      (isText(el.prev) && (el.prev.data || '').trim() === '') && 
+    const isFirstRow = el.prev === null ||
+      (isText(el.prev) && (el.prev.data || '').trim() === '') &&
       (el.prev.prev === null || !isElement(el.prev.prev));
     const isHeadrow = cells.every((cell: Node) => isElement(cell) && cell.name?.toLowerCase() === 'th') ||
                       (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'thead' &&
                        (el.parent.children || []).filter((c: Node) => isElement(c) && c.name === 'tr').length === 1);
-    
+
     const isHeadRowMissing = (isFirstRow && el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() !== 'tbody') ||
-                             (isFirstRow && el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' && 
-                              (el.parent.parent?.children || []).filter((c: Node) => 
+                             (isFirstRow && el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' &&
+                              (el.parent.parent?.children || []).filter((c: Node) =>
                                 isElement(c) && c.name === 'thead'
                               ).length < 1);
-    
+
     let overline = '';
     let underline = '';
     let fullColspan = 0;
-    
+
     for (const cell of cells as Element[]) {
       const colspanAttr = cell.attribs?.colspan;
       if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
@@ -988,17 +987,17 @@ export class MarkdownConverter {
         fullColspan += 1;
       }
     }
-    
+
     if ((isHeadrow || (isHeadRowMissing && this.options.table_infer_header)) && isFirstRow) {
       underline += '| ' + Array(fullColspan).fill('---').join(' | ') + ' |\n';
     } else if ((isHeadRowMissing && !this.options.table_infer_header) ||
                (isFirstRow && (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'table' ||
-                (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' && 
+                (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' &&
                  !el.parent.prev)))) {
       overline += '| ' + Array(fullColspan).fill('').join(' | ') + ' |\n';
       overline += '| ' + Array(fullColspan).fill('---').join(' | ') + ' |\n';
     }
-    
+
     return overline + '|' + text + '\n' + underline;
   }
 }

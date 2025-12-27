@@ -196,7 +196,7 @@ describe('Escaping Tests', () => {
     });
 
     test('no escape without escape_misc', () => {
-      expect(md(`\\ &lt;foo> &amp;amp; | \` \``, { escape_misc: false })).toBe(`\\ <foo> &amp; | \` \``);
+      expect(md('\\ &lt;foo> &amp;amp; | ` `', { escape_misc: false })).toBe('\\ <foo> &amp; | ` `');
     });
   });
 });
