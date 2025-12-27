@@ -58,9 +58,9 @@ describe('Custom Converter Tests', () => {
 
   describe('Soup Method', () => {
     test('convert soup object', () => {
+      const htmlparser2 = require('htmlparser2');
       const html = '<b>test</b>';
-      const { parse } = require('node-html-parser');
-      const soup = parse(html);
+      const soup = htmlparser2.parseDocument(html);
       expect(new MarkdownConverter().convertSoup(soup)).toBe('**test**');
     });
   });

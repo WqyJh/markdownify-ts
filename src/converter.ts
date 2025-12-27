@@ -1,7 +1,10 @@
-import { parse, HTMLElement, Node, TextNode } from 'node-html-parser';
-import {
+import * as htmlparser2 from 'htmlparser2';
+import { Element, Text, Document, Node } from 'domhandler';
+import type {
   MarkdownConverterOptions,
-  DefaultMarkdownConverterOptions,
+  DefaultMarkdownConverterOptions
+} from './types';
+import {
   ATX,
   ATX_CLOSED,
   UNDERLINED,
@@ -26,6 +29,19 @@ const rePreRstrip1 = /\n *$/;
 const rePreLstrip = /^[ \n]*\n/;
 const rePreRstrip = /[ \n]*$/;
 
+// Type guards for htmlparser2 nodes
+function isElement(node: Node): node is Element {
+  return node.type === 'tag';
+}
+
+function isText(node: Node): node is Text {
+  return node.type === 'text';
+}
+
+function isDocument(node: Node): node is Document {
+  return node.type === 'root';
+}
+
 function chomp(text: string): [string, string, string] {
   const prefix = text && text[0] === ' ' ? ' ' : '';
   const suffix = text && text[text.length - 1] === ' ' ? ' ' : '';
@@ -34,7 +50,7 @@ function chomp(text: string): [string, string, string] {
 }
 
 function abstractInlineConversion(markupFn: (self: MarkdownConverter) => string) {
-  return function(this: MarkdownConverter, el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  return function(this: MarkdownConverter, el: Element, text: string, parent_tags: Set<string>): string {
     const markupPrefix = markupFn(this);
     let markupSuffix = markupPrefix;
     
@@ -55,11 +71,11 @@ function abstractInlineConversion(markupFn: (self: MarkdownConverter) => string)
   };
 }
 
-function shouldRemoveWhitespaceInside(el: HTMLElement): boolean {
-  if (!el || !el.tagName) {
+function shouldRemoveWhitespaceInside(el: Element): boolean {
+  if (!el || !el.name) {
     return false;
   }
-  const tagName = el.tagName.toLowerCase();
+  const tagName = el.name.toLowerCase();
   if (reHtmlHeading.test(tagName)) {
     return true;
   }
@@ -67,14 +83,11 @@ function shouldRemoveWhitespaceInside(el: HTMLElement): boolean {
           'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'].includes(tagName);
 }
 
-function shouldRemoveWhitespaceOutside(el: HTMLElement): boolean {
+function shouldRemoveWhitespaceOutside(el: Node | null): boolean {
   if (!el) return false;
-  const isPre = el.tagName ? el.tagName.toLowerCase() === 'pre' : false;
+  if (!isElement(el)) return false;
+  const isPre = el.name ? el.name.toLowerCase() === 'pre' : false;
   return shouldRemoveWhitespaceInside(el) || isPre;
-}
-
-function hasSibling(el: any): boolean {
-  return el && (el.previousSibling !== undefined || el.nextSibling !== undefined);
 }
 
 // Strip functions for <pre> elements (aligned with Python)
@@ -141,13 +154,36 @@ export class MarkdownConverter {
   }
 
   convert(html: string): string {
-    const root = parse(html);
-    const body = root.querySelector('body') || root;
-    let result = this.convertSoup(body);
+    // Pre-process HTML to fix htmlparser2 bug with self-closing tags
+    // htmlparser2 has a bug where <span/> causes subsequent content to be lost
+    // Convert self-closing tags to standard tags to work around this
+    // But exclude <br> and <hr> tags which are handled correctly by htmlparser2
+    html = html.replace(/<(\w+)([^>]*)\/>/g, (match, tagName, attrs) => {
+      const tag = tagName.toLowerCase();
+      if (tag === 'br' || tag === 'hr') {
+        return match; // Keep self-closing for these
+      }
+      return `<${tagName}${attrs}></${tagName}>`;
+    });
+    
+    // Parse HTML using htmlparser2
+    const dom = htmlparser2.parseDocument(html);
+    
+    // Find body element or use root
+    let body: Element | undefined;
+    if (dom.children) {
+      for (const child of dom.children) {
+        if (isElement(child) && child.name === 'body') {
+          body = child;
+          break;
+        }
+      }
+    }
+    
+    const root = body || dom;
+    let result = this.convertSoup(root);
     
     // Apply strip_document logic
-    // strip_document should always have a value (default is STRIP)
-    // Only skip stripping if explicitly set to null
     const stripDocument = this.options.strip_document;
     if (stripDocument !== null) {
       result = this.applyStripDocument(result, stripDocument);
@@ -167,49 +203,77 @@ export class MarkdownConverter {
     return text;
   }
 
-  convertSoup(soup: HTMLElement): string {
-    return this.processTag(soup, new Set());
+  convertSoup(soup: Node): string {
+    if (isDocument(soup)) {
+      // For Document nodes, process all children
+      const results = (soup.children || [])
+        .map((child: Node) => this.processElement(child, new Set()))
+        .filter((s: string) => s);
+      
+      // Join results, merging excess newlines between elements
+      if (results.length === 0) return '';
+      if (results.length === 1) return results[0];
+      
+      let result = results[0];
+      for (let i = 1; i < results.length; i++) {
+        const current = results[i];
+        // If result ends with \n\n and current starts with \n\n, merge to single \n\n
+        if (result.endsWith('\n\n') && current.startsWith('\n\n')) {
+          result += current.substring(2); // Remove the first \n\n from current
+        } else if (result.endsWith('\n') && current.startsWith('\n')) {
+          // If both have at least one \n, just add current (avoiding excess)
+          result += current;
+        } else {
+          result += current;
+        }
+      }
+      return result;
+    } else if (isElement(soup)) {
+      return this.processTag(soup, new Set());
+    } else if (isText(soup)) {
+      return this.processText(soup, new Set());
+    }
+    return '';
   }
 
   processElement(node: Node, parent_tags: Set<string> = new Set()): string {
-    if (node instanceof TextNode) {
+    if (isText(node)) {
       // Check for special content that should be ignored
-      const text = node.text || '';
+      const text = node.data || '';
       if (text.trim().startsWith('<!DOCTYPE') || 
           text.trim().startsWith('<![CDATA[')) {
         return '';
       }
       return this.processText(node, parent_tags);
-    } else if (node instanceof HTMLElement) {
+    } else if (isElement(node)) {
       return this.processTag(node, parent_tags);
     } else {
       return '';
     }
   }
 
-  processTag(node: HTMLElement, parent_tags: Set<string> = new Set()): string {
+  processTag(node: Node, parent_tags: Set<string> = new Set()): string {
+    if (!isElement(node)) return '';
+    
     const shouldRemoveInside = shouldRemoveWhitespaceInside(node);
 
     const _canIgnore = (el: Node): boolean => {
-      if (el instanceof HTMLElement) {
+      if (isElement(el)) {
         return false;
-      } else if (el instanceof TextNode) {
-        if (el.text.trim() !== '') {
+      } else if (isText(el)) {
+        if ((el.data || '').trim() !== '') {
           return false;
         }
-        // For TextNode, check if it has siblings using the parent's childNodes
-        const hasPrevSibling = el.parentNode && el.parentNode.childNodes.indexOf(el) > 0;
-        const hasNextSibling = el.parentNode && el.parentNode.childNodes.indexOf(el) < el.parentNode.childNodes.length - 1;
+        // For TextNode, check if it has siblings
+        const hasPrevSibling = el.prev !== null;
+        const hasNextSibling = el.next !== null;
         
         if (shouldRemoveInside && (!hasPrevSibling || !hasNextSibling)) {
           return true;
         }
         
-        // Check siblings using parent's childNodes
-        const prevSibling = hasPrevSibling ? el.parentNode.childNodes[el.parentNode.childNodes.indexOf(el) - 1] : null;
-        const nextSibling = hasNextSibling ? el.parentNode.childNodes[el.parentNode.childNodes.indexOf(el) + 1] : null;
-        if (shouldRemoveWhitespaceOutside(prevSibling as HTMLElement) || 
-            shouldRemoveWhitespaceOutside(nextSibling as HTMLElement)) {
+        if (shouldRemoveWhitespaceOutside(el.prev) || 
+            shouldRemoveWhitespaceOutside(el.next)) {
           return true;
         }
         
@@ -219,10 +283,10 @@ export class MarkdownConverter {
       }
     };
 
-    const childrenToConvert = node.childNodes.filter((el: Node) => !_canIgnore(el));
+    const childrenToConvert = (node.children || []).filter((el: Node) => !_canIgnore(el));
 
     const parent_tags_for_children = new Set(parent_tags);
-    const tagName = node.tagName?.toLowerCase() || '';
+    const tagName = node.name?.toLowerCase() || '';
     parent_tags_for_children.add(tagName);
 
     if (reHtmlHeading.test(tagName) || ['td', 'th'].includes(tagName)) {
@@ -238,7 +302,7 @@ export class MarkdownConverter {
       .filter((s: string) => s);
 
     let processedChildStrings: string[];
-    if (tagName === 'pre' || node.closest?.('pre')) {
+    if (tagName === 'pre' || this.closest(node, 'pre')) {
       processedChildStrings = childStrings;
     } else {
       processedChildStrings = [''];
@@ -262,7 +326,7 @@ export class MarkdownConverter {
     let text = processedChildStrings.join('');
 
     // For <pre> tags, if the content contains HTML tags (like <code>), we need to strip the HTML tags
-    // This handles cases like <pre><code>test</code></pre> where node-html-parser treats the content as text
+    // This handles cases like <pre><code>test</code></pre> where htmlparser2 treats the content as text
     if (tagName === 'pre' && text.includes('<') && text.includes('>')) {
       // Remove HTML tags but preserve the content
       text = text.replace(/<[^>]*>/g, '');
@@ -276,8 +340,10 @@ export class MarkdownConverter {
     return text;
   }
 
-  processText(el: TextNode, parent_tags: Set<string> = new Set()): string {
-    let text = el.text || '';
+  processText(el: Node, parent_tags: Set<string> = new Set()): string {
+    if (!isText(el)) return '';
+    
+    let text = el.data || '';
 
     if (!parent_tags.has('pre')) {
       if (this.options.wrap) {
@@ -294,26 +360,34 @@ export class MarkdownConverter {
       text = this.escape(text, parent_tags);
     }
 
-    // For TextNode, check siblings using parent's childNodes
-    const parentNode = el.parentNode as any;
-    if (parentNode) {
-      const currentIndex = parentNode.childNodes.indexOf(el);
-      const hasPrevSibling = currentIndex > 0;
-      const hasNextSibling = currentIndex < parentNode.childNodes.length - 1;
-      const prevSibling = hasPrevSibling ? parentNode.childNodes[currentIndex - 1] : null;
-      const nextSibling = hasNextSibling ? parentNode.childNodes[currentIndex + 1] : null;
+    // For TextNode, check siblings
+    if (el.parent) {
+      const hasPrevSibling = el.prev !== null;
+      const hasNextSibling = el.next !== null;
       
-      if (shouldRemoveWhitespaceOutside(prevSibling as HTMLElement) || 
-          (shouldRemoveWhitespaceInside(el.parentNode as HTMLElement) && !hasPrevSibling)) {
+      if (shouldRemoveWhitespaceOutside(el.prev) || 
+          (el.parent && isElement(el.parent) && shouldRemoveWhitespaceInside(el.parent) && !hasPrevSibling)) {
         text = text.replace(/^[\t\r\n ]+/, '');
       }
-      if (shouldRemoveWhitespaceOutside(nextSibling as HTMLElement) || 
-          (shouldRemoveWhitespaceInside(el.parentNode as HTMLElement) && !hasNextSibling)) {
+      if (shouldRemoveWhitespaceOutside(el.next) || 
+          (el.parent && isElement(el.parent) && shouldRemoveWhitespaceInside(el.parent) && !hasNextSibling)) {
         text = text.replace(/[\t\r\n ]+$/, '');
       }
     }
 
     return text;
+  }
+
+  // Helper method to find closest ancestor with given tag name
+  private closest(node: Node, tagName: string): boolean {
+    let current: Node | null = node.parent;
+    while (current) {
+      if (isElement(current) && current.name?.toLowerCase() === tagName) {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
   }
 
   getConvFnCached(tagName: string): any {
@@ -338,7 +412,7 @@ export class MarkdownConverter {
     const match = reHtmlHeading.exec(tagName);
     if (match) {
       const n = parseInt(match[1], 10);
-      return (el: HTMLElement, text: string, parent_tags: Set<string>) => this.convert_hN(n, el, text, parent_tags);
+      return (el: Element, text: string, parent_tags: Set<string>) => this.convert_hN(n, el, text, parent_tags);
     }
 
     return null;
@@ -388,7 +462,7 @@ export class MarkdownConverter {
     return text ? `\n\n${text}\n${padChar.repeat(text.length)}\n\n` : '';
   }
 
-  convert_a(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_a(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_noformat')) {
       return text;
     }
@@ -398,8 +472,8 @@ export class MarkdownConverter {
       return '';
     }
     
-    const href = el.getAttribute('href');
-    const title = el.getAttribute('title');
+    const href = el.attribs?.href || '';
+    const title = el.attribs?.title || '';
     
     if (this.options.autolinks && 
         chompedText.replace(/\\_/g, '_') === href && 
@@ -421,7 +495,7 @@ export class MarkdownConverter {
     return self.options.strong_em_symbol.repeat(2);
   });
 
-  convert_blockquote(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_blockquote(el: Element, text: string, parent_tags: Set<string>): string {
     // Use custom trim that preserves non-breaking spaces
     text = this.trimWhitespace(text || '');
     if (parent_tags.has('_inline')) {
@@ -443,7 +517,7 @@ export class MarkdownConverter {
     return '\n' + indentedLines.join('\n') + '\n\n';
   }
 
-  convert_br(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_br(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_inline')) {
       return ' ';
     }
@@ -455,7 +529,7 @@ export class MarkdownConverter {
     }
   }
 
-  convert_code(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_code(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_noformat')) {
       return text;
     }
@@ -479,7 +553,7 @@ export class MarkdownConverter {
 
   convert_del = abstractInlineConversion(() => '~~');
 
-  convert_div(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_div(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_inline')) {
       return ' ' + text.trim() + ' ';
     }
@@ -496,7 +570,7 @@ export class MarkdownConverter {
 
   convert_kbd = this.convert_code;
 
-  convert_dd(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_dd(el: Element, text: string, parent_tags: Set<string>): string {
     text = (text || '').trim();
     if (parent_tags.has('_inline')) {
       return ' ' + text + ' ';
@@ -517,11 +591,11 @@ export class MarkdownConverter {
     return `${text}\n`;
   }
 
-  convert_dl(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_dl(el: Element, text: string, parent_tags: Set<string>): string {
     return this.convert_div(el, text, parent_tags);
   }
 
-  convert_dt(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_dt(el: Element, text: string, parent_tags: Set<string>): string {
     text = (text || '').trim();
     text = text.replace(reAllWhitespace, ' ');
     if (parent_tags.has('_inline')) {
@@ -534,7 +608,7 @@ export class MarkdownConverter {
     return '\n\n' + text + '\n';
   }
 
-  convert_hN(n: number, el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_hN(n: number, el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_inline')) {
       return text;
     }
@@ -555,44 +629,46 @@ export class MarkdownConverter {
     return `\n\n${hashes} ${text}\n\n`;
   }
 
-  convert_hr(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_hr(el: Element, text: string, parent_tags: Set<string>): string {
     return '\n\n---\n\n';
   }
 
   convert_i = this.convert_em;
 
-  convert_img(el: HTMLElement, text: string, parent_tags: Set<string>): string {
-    const alt = el.getAttribute('alt') || '';
-    const src = el.getAttribute('src') || '';
-    const title = el.getAttribute('title') || '';
+  convert_img(el: Element, text: string, parent_tags: Set<string>): string {
+    const alt = el.attribs?.alt || '';
+    const src = el.attribs?.src || '';
+    const title = el.attribs?.title || '';
     const titlePart = title ? ` "${title.replace(/"/g, '\\"')}"` : '';
     
     if (parent_tags.has('_inline') && 
-        el.parentNode?.tagName && 
-        !this.options.keep_inline_images_in.includes(el.parentNode.tagName.toLowerCase())) {
+        el.parent && isElement(el.parent) &&
+        !this.options.keep_inline_images_in.includes(el.parent.name.toLowerCase())) {
       return alt;
     }
 
     return `![${alt}](${src}${titlePart})`;
   }
 
-  convert_video(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_video(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_inline') && 
-        el.parentNode?.tagName && 
-        !this.options.keep_inline_images_in.includes(el.parentNode.tagName.toLowerCase())) {
+        el.parent && isElement(el.parent) &&
+        !this.options.keep_inline_images_in.includes(el.parent.name.toLowerCase())) {
       return text;
     }
     
-    const src = el.getAttribute('src') || '';
+    const src = el.attribs?.src || '';
     let actualSrc = src;
-    if (!actualSrc) {
-      const sources = el.querySelectorAll('source[src]');
-      if (sources.length > 0) {
-        actualSrc = sources[0].getAttribute('src') || '';
+    if (!actualSrc && el.children) {
+      const sources = el.children.filter((child: Node) => 
+        isElement(child) && child.name === 'source' && child.attribs?.src
+      );
+      if (sources.length > 0 && isElement(sources[0])) {
+        actualSrc = sources[0].attribs?.src || '';
       }
     }
     
-    const poster = el.getAttribute('poster') || '';
+    const poster = el.attribs?.poster || '';
     if (actualSrc && poster) {
       return `[![${text}](${poster})](${actualSrc})`;
     }
@@ -605,10 +681,11 @@ export class MarkdownConverter {
     return text;
   }
 
-  convert_list(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_list(el: Element, text: string, parent_tags: Set<string>): string {
     let beforeParagraph = false;
-    const nextSibling = el.nextElementSibling;
-    if (nextSibling && !['ul', 'ol'].includes(nextSibling.tagName?.toLowerCase())) {
+    const nextSibling = el.next;
+    if (nextSibling && isElement(nextSibling) && 
+        !['ul', 'ol'].includes(nextSibling.name?.toLowerCase() || '')) {
       beforeParagraph = true;
     }
     
@@ -622,29 +699,36 @@ export class MarkdownConverter {
   convert_ul = this.convert_list;
   convert_ol = this.convert_list;
 
-  convert_li(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_li(el: Element, text: string, parent_tags: Set<string>): string {
     text = (text || '').trim();
     if (!text) {
       return "\n";
     }
 
-    const parent = el.parentNode as HTMLElement;
+    const parent = el.parent;
     let bullet = '';
     
-    if (parent && parent.tagName.toLowerCase() === 'ol') {
-      const startAttr = parent.getAttribute('start');
+    if (parent && isElement(parent) && parent.name?.toLowerCase() === 'ol') {
+      const startAttr = parent.attribs?.start;
       const start = startAttr && !isNaN(parseInt(startAttr, 10)) ? parseInt(startAttr, 10) : 1;
-      const prevSiblings = Array.from(parent.children).filter((child: HTMLElement) => child.tagName.toLowerCase() === 'li');
+      const prevSiblings = (parent.children || []).filter((child: Node) => 
+        isElement(child) && child.name?.toLowerCase() === 'li'
+      );
       const currentIndex = prevSiblings.indexOf(el);
-      bullet = `${start + currentIndex}.`;
+      // Handle case where el is not found in prevSiblings (shouldn't happen but be safe)
+      if (currentIndex === -1) {
+        bullet = `${start}.`;
+      } else {
+        bullet = `${start + currentIndex}.`;
+      }
     } else {
       let depth = -1;
-      let current: HTMLElement | null = el;
+      let current: Node | null = el;
       while (current) {
-        if (current.tagName?.toLowerCase() === 'ul') {
+        if (isElement(current) && current.name?.toLowerCase() === 'ul') {
           depth += 1;
         }
-        current = current.parentNode as HTMLElement;
+        current = current.parent;
       }
       const bullets = this.options.bullets;
       bullet = bullets[depth % bullets.length];
@@ -663,7 +747,7 @@ export class MarkdownConverter {
     return `${text}\n`;
   }
 
-  convert_p(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_p(el: Element, text: string, parent_tags: Set<string>): string {
     if (parent_tags.has('_inline')) {
       return ' ' + this.trimWhitespace(text) + ' ';
     }
@@ -738,7 +822,7 @@ export class MarkdownConverter {
     return text.replace(/[ \t\r\n]+$/, '');
   }
 
-  convert_pre(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_pre(el: Element, text: string, parent_tags: Set<string>): string {
     if (!text) {
       return '';
     }
@@ -746,7 +830,12 @@ export class MarkdownConverter {
     let codeLanguage = this.options.code_language;
 
     if (this.options.code_language_callback) {
-      codeLanguage = this.options.code_language_callback(el) || codeLanguage;
+      // Create a compatible interface for the callback
+      const compatibleEl = {
+        getAttribute: (name: string) => el.attribs?.[name] || null,
+        attribs: el.attribs
+      };
+      codeLanguage = this.options.code_language_callback(compatibleEl as any) || codeLanguage;
     }
 
     // Handle strip_pre options using the new functions
@@ -770,15 +859,15 @@ export class MarkdownConverter {
     }
   }
 
-  convert_q(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_q(el: Element, text: string, parent_tags: Set<string>): string {
     return '"' + text + '"';
   }
 
-  convert_script(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_script(el: Element, text: string, parent_tags: Set<string>): string {
     return '';
   }
 
-  convert_style(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_style(el: Element, text: string, parent_tags: Set<string>): string {
     return '';
   }
 
@@ -794,53 +883,59 @@ export class MarkdownConverter {
     return self.options.sup_symbol;
   });
 
-  convert_table(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_table(el: Element, text: string, parent_tags: Set<string>): string {
     return '\n\n' + text.trim() + '\n\n';
   }
 
-  convert_caption(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_caption(el: Element, text: string, parent_tags: Set<string>): string {
     return text.trim() + '\n\n';
   }
 
-  convert_figcaption(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_figcaption(el: Element, text: string, parent_tags: Set<string>): string {
     return '\n\n' + text.trim() + '\n\n';
   }
 
-  convert_td(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_td(el: Element, text: string, parent_tags: Set<string>): string {
     let colspan = 1;
-    const colspanAttr = el.getAttribute('colspan');
+    const colspanAttr = el.attribs?.colspan;
     if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
       colspan = Math.max(1, Math.min(1000, parseInt(colspanAttr, 10)));
     }
     return ' ' + text.trim().replace(/\n/g, " ") + ' |'.repeat(colspan);
   }
 
-  convert_th(el: HTMLElement, text: string, parent_tags: Set<string>): string {
+  convert_th(el: Element, text: string, parent_tags: Set<string>): string {
     let colspan = 1;
-    const colspanAttr = el.getAttribute('colspan');
+    const colspanAttr = el.attribs?.colspan;
     if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
       colspan = Math.max(1, Math.min(1000, parseInt(colspanAttr, 10)));
     }
     return ' ' + text.trim().replace(/\n/g, " ") + ' |'.repeat(colspan);
   }
 
-  convert_tr(el: HTMLElement, text: string, parent_tags: Set<string>): string {
-    const cells = el.querySelectorAll('td, th');
-    const isFirstRow = !el.previousElementSibling;
-    const isHeadrow = cells.every((cell: HTMLElement) => cell.tagName.toLowerCase() === 'th') ||
-                      (el.parentNode?.tagName.toLowerCase() === 'thead' &&
-                       el.parentNode.querySelectorAll('tr').length === 1);
+  convert_tr(el: Element, text: string, parent_tags: Set<string>): string {
+    const cells = (el.children || []).filter((child: Node) => 
+      isElement(child) && (child.name === 'td' || child.name === 'th')
+    );
+    const isFirstRow = el.prev === null || 
+      (isText(el.prev) && (el.prev.data || '').trim() === '') && 
+      (el.prev.prev === null || !isElement(el.prev.prev));
+    const isHeadrow = cells.every((cell: Node) => isElement(cell) && cell.name?.toLowerCase() === 'th') ||
+                      (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'thead' &&
+                       (el.parent.children || []).filter((c: Node) => isElement(c) && c.name === 'tr').length === 1);
     
-    const isHeadRowMissing = (isFirstRow && el.parentNode?.tagName.toLowerCase() !== 'tbody') ||
-                             (isFirstRow && el.parentNode?.tagName.toLowerCase() === 'tbody' && 
-                              el.parentNode.parentNode?.querySelectorAll('thead').length! < 1);
+    const isHeadRowMissing = (isFirstRow && el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() !== 'tbody') ||
+                             (isFirstRow && el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' && 
+                              (el.parent.parent?.children || []).filter((c: Node) => 
+                                isElement(c) && c.name === 'thead'
+                              ).length < 1);
     
     let overline = '';
     let underline = '';
     let fullColspan = 0;
     
-    for (const cell of cells as HTMLElement[]) {
-      const colspanAttr = cell.getAttribute('colspan');
+    for (const cell of cells as Element[]) {
+      const colspanAttr = cell.attribs?.colspan;
       if (colspanAttr && !isNaN(parseInt(colspanAttr, 10))) {
         fullColspan += Math.max(1, Math.min(1000, parseInt(colspanAttr, 10)));
       } else {
@@ -851,9 +946,9 @@ export class MarkdownConverter {
     if ((isHeadrow || (isHeadRowMissing && this.options.table_infer_header)) && isFirstRow) {
       underline += '| ' + Array(fullColspan).fill('---').join(' | ') + ' |\n';
     } else if ((isHeadRowMissing && !this.options.table_infer_header) ||
-               (isFirstRow && (el.parentNode?.tagName.toLowerCase() === 'table' ||
-                (el.parentNode?.tagName.toLowerCase() === 'tbody' && 
-                 !el.parentNode.previousElementSibling)))) {
+               (isFirstRow && (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'table' ||
+                (el.parent && isElement(el.parent) && el.parent.name?.toLowerCase() === 'tbody' && 
+                 !el.parent.prev)))) {
       overline += '| ' + Array(fullColspan).fill('').join(' | ') + ' |\n';
       overline += '| ' + Array(fullColspan).fill('---').join(' | ') + ' |\n';
     }

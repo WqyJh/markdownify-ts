@@ -1,7 +1,9 @@
 export { MarkdownConverter, markdownify } from './converter';
-export { 
+export type { 
   MarkdownConverterOptions, 
-  DefaultMarkdownConverterOptions,
+  DefaultMarkdownConverterOptions
+} from './types';
+export { 
   ATX, 
   ATX_CLOSED, 
   UNDERLINED, 
