@@ -6,7 +6,6 @@
 // Default options matching Python version's DefaultOptions class
 export interface DefaultMarkdownConverterOptions {
   autolinks: boolean;
-  bs4_options: any;
   bullets: string;
   code_language: string;
   code_language_callback: ((el: any) => string | null) | null;
@@ -32,7 +31,6 @@ export interface DefaultMarkdownConverterOptions {
 // User-provided options (all fields optional)
 export interface MarkdownConverterOptions extends Partial<DefaultMarkdownConverterOptions> {
   autolinks?: boolean;
-  bs4_options?: any;
   bullets?: string;
   code_language?: string;
   code_language_callback?: ((el: any) => string | null) | null;

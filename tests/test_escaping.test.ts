@@ -35,7 +35,6 @@ describe('Escaping Tests', () => {
 
   describe('test_hexadecimal_entities', () => {
     test('convert hexadecimal entities', () => {
-      // This looks to be a bug in BeautifulSoup (fixed in bs4) that we have to work around.
       expect(md('&#x27;')).toBe('\x27');
     });
   });

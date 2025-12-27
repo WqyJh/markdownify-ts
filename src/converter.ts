@@ -8,10 +8,13 @@ import {
   ATX,
   ATX_CLOSED,
   UNDERLINED,
+  SETEXT,
   SPACES,
   BACKSLASH,
   ASTERISK,
   UNDERSCORE,
+  LSTRIP,
+  RSTRIP,
   STRIP,
   STRIP_ONE
 } from './types';
@@ -112,7 +115,6 @@ export class MarkdownConverter {
   constructor(options: Partial<MarkdownConverterOptions> = {}) {
     const defaultOptions: DefaultMarkdownConverterOptions = {
       autolinks: true,
-      bs4_options: 'html.parser',
       bullets: '*+-',
       code_language: '',
       code_language_callback: null,
@@ -142,7 +144,8 @@ export class MarkdownConverter {
     // This matches Python's behavior where undefined means "not provided"
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
-        (this.options as any)[key] = value;
+        // Normalize option values for case-insensitive support
+        (this.options as any)[key] = this.normalizeOptionValue(key, value);
       }
     }
     
@@ -151,6 +154,49 @@ export class MarkdownConverter {
     }
 
     this.convertFnCache = new Map();
+  }
+
+  // Normalize option values for case-insensitive support
+  private normalizeOptionValue(key: string, value: any): any {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    
+    const lowerValue = value.toLowerCase();
+    
+    switch (key) {
+      case 'heading_style':
+        if (lowerValue === 'atx') return ATX;
+        if (lowerValue === 'atx_closed') return ATX_CLOSED;
+        if (lowerValue === 'underlined') return UNDERLINED;
+        return value;
+      
+      case 'newline_style':
+        if (lowerValue === 'spaces') return SPACES;
+        if (lowerValue === 'backslash') return BACKSLASH;
+        return value;
+      
+      case 'strong_em_symbol':
+        if (lowerValue === 'asterisk' || value === '*') return ASTERISK;
+        if (lowerValue === 'underscore' || value === '_') return UNDERSCORE;
+        return value;
+      
+      case 'strip_document':
+        if (lowerValue === 'strip') return STRIP;
+        if (lowerValue === 'lstrip') return LSTRIP;
+        if (lowerValue === 'rstrip') return RSTRIP;
+        if (lowerValue === 'null' || value === null) return null;
+        return value;
+      
+      case 'strip_pre':
+        if (lowerValue === 'strip') return STRIP;
+        if (lowerValue === 'strip_one') return STRIP_ONE;
+        if (lowerValue === 'null' || value === null) return null;
+        return value;
+      
+      default:
+        return value;
+    }
   }
 
   convert(html: string): string {
@@ -522,7 +568,7 @@ export class MarkdownConverter {
       return ' ';
     }
 
-    if (this.options.newline_style.toLowerCase() === BACKSLASH) {
+    if (this.options.newline_style === BACKSLASH) {
       return '\\\n';
     } else {
       return '  \n';
@@ -615,7 +661,7 @@ export class MarkdownConverter {
 
     n = Math.max(1, Math.min(6, n));
 
-    const style = this.options.heading_style.toLowerCase();
+    const style = this.options.heading_style;
     text = text.trim();
     if (style === UNDERLINED && n <= 2) {
       const line = n === 1 ? '=' : '-';

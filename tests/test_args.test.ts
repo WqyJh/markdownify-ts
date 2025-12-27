@@ -72,17 +72,4 @@ describe('Arguments Tests', () => {
     });
   });
 
-  describe('BS4 Options', () => {
-    test('bs4 options as string', () => {
-      expect(markdownify('<p>Hello</p>', { bs4_options: 'html.parser' })).toBe('Hello');
-    });
-
-    test('bs4 options as array', () => {
-      expect(markdownify('<p>Hello</p>', { bs4_options: ['html.parser'] })).toBe('Hello');
-    });
-
-    test('bs4 options as object', () => {
-      expect(markdownify('<p>Hello</p>', { bs4_options: { features: 'html.parser' } })).toBe('Hello');
-    });
-  });
 });
